@@ -8,7 +8,7 @@ exclude = [
 ]
 
 [project]
-name = "asyncio-utils"
+name = "x-asyncio"
 version = "0.1"
 authors = [
     { name="Yisu Peng", email="yisupeng@gmail.com" },
@@ -25,8 +25,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/shawn-peng/asyncio-utils"
-"Bug Tracker" = "https://github.com/shawn-peng/asyncio-utils/issues"
+"Homepage" = "https://github.com/shawn-peng/x-asyncio"
+"Bug Tracker" = "https://github.com/shawn-peng/x-asyncio/issues"
 
 #[tool.hatch.build.targets.wheel]
 #packages = ["src/asyncio-utils"]
