@@ -8,7 +8,7 @@ exclude = [
 ]
 
 [project]
-name = "x-asyncio"
+name = "xasyncio"
 version = "0.1"
 authors = [
     { name="Yisu Peng", email="yisupeng@gmail.com" },
