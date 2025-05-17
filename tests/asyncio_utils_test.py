@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import patch
 
-from asyncio_utils import *
+from xasyncio import *
 
 
 def _print(*args, **kwargs):
