@@ -14,9 +14,9 @@ class MyTestCase(unittest.TestCase):
         steps = [0]
         loop = ThreadedEventLoop('test_loop')
         steps.append(1)
-        loop.call_sync(lambda: (_print('lambda function called'), steps.append(2)))
+        loop.call_sync(lambda: (print('lambda function called'), steps.append(2)))
         steps.append(3)
-        _print(loop.stopped)
+        print(loop.stopped)
 
         self.assertEqual([0, 1, 2, 3], steps)
         loop.stop()
@@ -27,13 +27,27 @@ class MyTestCase(unittest.TestCase):
         loop = ThreadedEventLoop('test_loop')
         event = ThreadSafeEvent()
         steps.append(1)
-        loop.call_async(lambda: (_print('lambda function called'), steps.append(3), event.set()))
+        loop.call_async(lambda: (print('lambda function called'), steps.append(3), event.set()))
         steps.append(2)
         await event.wait()
         steps.append(4)
 
         self.assertEqual([0, 1, 2, 3, 4], steps)
         del loop
+
+    def test_sync_coro(self):
+        steps = [0]
+        loop = ThreadedEventLoop('test_loop')
+
+        async def _test_coro():
+            print('coroutine called')
+            steps.append(1)
+
+        loop.await_coroutine(_test_coro())
+        steps.append(2)
+        self.assertEqual([0, 1, 2], steps)
+        print('stopping threaded loop')
+        loop.stop()
 
 
 if __name__ == '__main__':

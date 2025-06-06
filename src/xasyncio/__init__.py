@@ -1,5 +1,10 @@
 import asyncio
 import threading
+import traceback
+
+
+class ThreadingError(Exception):
+    pass
 
 
 class ThreadedEventLoop:
@@ -8,7 +13,7 @@ class ThreadedEventLoop:
         self.thread = threading.Thread(target=self.run)
         self.events = {}
         self.events_out_thread = {}
-        self.loop = None
+        self.loop: asyncio.BaseEventLoop = None
         self.stopped = True
         self.thread.start()
         self.create_out_thread_event('loop_started')
@@ -28,6 +33,7 @@ class ThreadedEventLoop:
         #     print('calling from the loop thread')
         # else:
         #     print('calling from another loop')
+        print(f'Threaded loop {self.name} stopping')
         self.call_sync(self._stop)
         self.thread.join(10)
 
@@ -61,7 +67,7 @@ class ThreadedEventLoop:
         self.events_out_thread[name].wait()
 
     def notify_out_thread_event(self, name):
-        print('notify event', name)
+        # print('notify event', name)
         self.events_out_thread[name].set()
 
     def create_event(self, name):
@@ -79,13 +85,35 @@ class ThreadedEventLoop:
     def call_async(self, func, *args):
         self.loop.call_soon_threadsafe(func, *args)
 
+    # def _sync_coro(self, coro):
+    #     if threading.current_thread() != self.thread:
+    #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
+
+    def await_coroutine(self, coro):
+        # task = self.loop.create_task(coro)
+        finish_event = threading.Event()
+
+        async def _helper():
+            try:
+                await coro
+            except Exception as e:
+                traceback.print_exc()
+
+            finish_event.set()
+
+        self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
+        finish_event.wait()
+
 
 def blocking_call_w_loop(loop, func, *args):
     finish_event = threading.Event()
 
     def _helper():
-        func(*args)
-        finish_event.set()
+        try:
+            func(*args)
+            finish_event.set()
+        except Exception:
+            traceback.print_exc()
 
     loop.call_soon_threadsafe(_helper)
     finish_event.wait()
