@@ -111,6 +111,87 @@ class AsyncThread(threading.Thread):
         finish_event.wait()
 
 
+class AsyncedThread:
+    def __init__(self, name, thread):
+        self.thread = thread
+        self.loop = asyncio.get_event_loop()
+        assert self.loop.is_running()  # we require the loop already running
+        self.name = name
+        self.events = {}
+        self.events_out_thread = {}
+        self.stopped = True
+
+    def _stop(self):
+        """this function must be called with the thread"""
+        if self.stopped:
+            return
+        self.loop.stop()
+        self.stopped = True
+
+    def stop(self):
+        """thread safe stop function"""
+        # thread = threading.current_thread()
+        # if thread == self.thread:
+        #     print('calling from the loop thread')
+        # else:
+        #     print('calling from another loop')
+        print(f'Threaded loop {self.name} stopping')
+        self.call_sync(self._stop)
+        # self.thread.join(10)
+        self.join(10)
+
+    def _mark_running(self, running=True):
+        # if running:
+        #     print('mark running')
+        # else:
+        #     print('mark stopped')
+        self.stopped = not running
+
+    def create_out_thread_event(self, name):
+        self.events_out_thread[name] = threading.Event()
+
+    def wait_out_thread_event(self, name):
+        self.events_out_thread[name].wait()
+
+    def notify_out_thread_event(self, name):
+        # print('notify event', name)
+        self.events_out_thread[name].set()
+
+    def create_event(self, name):
+        self.events[name] = threading.Event()
+
+    def notify(self, event_name):
+        self.events[event_name].set()
+
+    def wait(self, event_name):
+        self.events[event_name].wait()
+
+    def call_sync(self, func, *args):
+        blocking_call_w_loop(self.loop, func, *args)
+
+    def call_async(self, func, *args):
+        self.loop.call_soon_threadsafe(func, *args)
+
+    # def _sync_coro(self, coro):
+    #     if threading.current_thread() != self.thread:
+    #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
+
+    def await_coroutine(self, coro):
+        # task = self.loop.create_task(coro)
+        finish_event = threading.Event()
+
+        async def _helper():
+            try:
+                await coro
+            except Exception as e:
+                traceback.print_exc()
+
+            finish_event.set()
+
+        self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
+        finish_event.wait()
+
+
 def blocking_call_w_loop(loop, func, *args):
     finish_event = threading.Event()
 
