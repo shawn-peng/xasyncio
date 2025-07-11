@@ -2,20 +2,22 @@ import asyncio
 import threading
 import traceback
 
+from typing import *
+
 
 class ThreadingError(Exception):
     pass
 
 
-class ThreadedEventLoop:
+class AsyncThread(threading.Thread):
     def __init__(self, name):
+        super().__init__()
         self.name = name
-        self.thread = threading.Thread(target=self.run)
         self.events = {}
         self.events_out_thread = {}
-        self.loop: asyncio.BaseEventLoop = None
+        self.loop: asyncio.BaseEventLoop | None = None
         self.stopped = True
-        self.thread.start()
+        self.start()
         self.create_out_thread_event('loop_started')
         self.wait_out_thread_event('loop_started')
 
@@ -35,7 +37,8 @@ class ThreadedEventLoop:
         #     print('calling from another loop')
         print(f'Threaded loop {self.name} stopping')
         self.call_sync(self._stop)
-        self.thread.join(10)
+        # self.thread.join(10)
+        self.join(10)
 
     def _mark_running(self, running=True):
         # if running:
@@ -46,11 +49,14 @@ class ThreadedEventLoop:
 
     def run(self):
         self.loop = asyncio.new_event_loop()
-        # self.loop = asyncio.get_event_loop()
         # Need to call this in the loop, mainly because need to make sure the loop is running
+        # debugging version
         # self.loop.call_soon_threadsafe(
         #     lambda: (
-        #         print('notifying loop started'), self._mark_running(), print(self.stopped), self.notify_out_thread_event('loop_started')))
+        #         print('notifying loop started'),
+        #         self._mark_running(),
+        #         print(self.stopped),
+        #         self.notify_out_thread_event('loop_started')))
         self.loop.call_soon_threadsafe(
             lambda: (
                 self._mark_running(), self.notify_out_thread_event('loop_started')

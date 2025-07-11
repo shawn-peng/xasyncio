@@ -12,7 +12,7 @@ def _print(*args, **kwargs):
 class MyTestCase(unittest.TestCase):
     def test_call_sync(self):
         steps = [0]
-        loop = ThreadedEventLoop('test_loop')
+        loop = AsyncThread('test_loop')
         steps.append(1)
         loop.call_sync(lambda: (print('lambda function called'), steps.append(2)))
         steps.append(3)
@@ -24,7 +24,7 @@ class MyTestCase(unittest.TestCase):
 
     async def test_call_async(self):
         steps = [0]
-        loop = ThreadedEventLoop('test_loop')
+        loop = AsyncThread('test_loop')
         event = ThreadSafeEvent()
         steps.append(1)
         loop.call_async(lambda: (print('lambda function called'), steps.append(3), event.set()))
@@ -37,7 +37,7 @@ class MyTestCase(unittest.TestCase):
 
     def test_sync_coro(self):
         steps = [0]
-        loop = ThreadedEventLoop('test_loop')
+        loop = AsyncThread('test_loop')
 
         async def _test_coro():
             print('coroutine called')
