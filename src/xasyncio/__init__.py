@@ -95,20 +95,21 @@ class AsyncThread(threading.Thread):
     #     if threading.current_thread() != self.thread:
     #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
 
-    def await_coroutine(self, coro):
-        # task = self.loop.create_task(coro)
-        finish_event = threading.Event()
+    def await_coroutine(self, coro, timeout=None):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
 
-        async def _helper():
-            try:
-                await coro
-            except Exception as e:
-                traceback.print_exc()
-
-            finish_event.set()
-
-        self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
-        finish_event.wait()
+        # finish_event = threading.Event()
+        #
+        # async def _helper():
+        #     try:
+        #         await coro
+        #     except Exception as e:
+        #         traceback.print_exc()
+        #
+        #     finish_event.set()
+        #
+        # self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
+        # finish_event.wait()
 
 
 class AsyncedThread:
@@ -176,20 +177,21 @@ class AsyncedThread:
     #     if threading.current_thread() != self.thread:
     #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
 
-    def await_coroutine(self, coro):
-        # task = self.loop.create_task(coro)
-        finish_event = threading.Event()
+    def await_coroutine(self, coro, timeout=None):
+        return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
 
-        async def _helper():
-            try:
-                await coro
-            except Exception as e:
-                traceback.print_exc()
-
-            finish_event.set()
-
-        self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
-        finish_event.wait()
+        # finish_event = threading.Event()
+        #
+        # async def _helper():
+        #     try:
+        #         await coro
+        #     except Exception as e:
+        #         traceback.print_exc()
+        #
+        #     finish_event.set()
+        #
+        # self.loop.call_soon_threadsafe(self.loop.create_task, _helper())
+        # finish_event.wait()
 
 
 def blocking_call_w_loop(loop, func, *args):
