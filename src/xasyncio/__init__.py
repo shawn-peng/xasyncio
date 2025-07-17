@@ -165,7 +165,7 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         self.stopped = True
         self.create_out_thread_event('loop_started')
         self.start()
-        # self.wait_out_thread_event('loop_started')
+        self.wait_out_thread_event('loop_started')
         logging.debug('AsyncThread init finished and running')
 
     def __repr__(self):
