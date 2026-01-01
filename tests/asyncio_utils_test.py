@@ -17,6 +17,7 @@ def _print(*args, **kwargs):
 
 def set_async_timeout(timeout):
     """Not working under thread blocking case"""
+
     def _set_async_timeout(f):
         assert asyncio.iscoroutinefunction(f)
 
@@ -48,7 +49,7 @@ def create_deadline(t):
 class BaseTestCases:
     class AsyncThreadTestBase(unittest.IsolatedAsyncioTestCase):
         async def asyncSetUp(self) -> None:
-            self.loop = None
+            self.loop: AsyncThreadBase | None = None
             # self.loop = AsyncThread('test_loop')
             # self.deadline = create_deadline(1)
             # set_deadline(1)
@@ -91,6 +92,19 @@ class BaseTestCases:
 
             self.assertEqual([0, 1, 2, 3], steps)
 
+        async def test_ensure_coroutine_raise_ex(self):
+            steps = [0]
+            loop = self.loop
+
+            async def _test_coro():
+                steps.append(2)
+                raise Exception('test ex')
+
+            loop.ensure_coroutine(_test_coro())
+            steps.append(1)
+            await asyncio.sleep(.1)
+            self.assertEqual([0, 1, 2], steps)
+
         # @set_async_timeout(1)
         async def test_call_async(self):
             steps = [0]
@@ -120,6 +134,20 @@ class BaseTestCases:
             self.assertEqual([0, 1, 2], steps)
             print('stopping threaded loop')
             # loop.stop()
+
+        async def test_sleep(self):
+            steps = [0]
+            loop = self.loop
+
+            async def loop_func():
+                steps.append(1)
+                await asyncio.sleep(.1)
+                steps.append(2)
+
+            loop.ensure_coroutine(loop_func())
+            await asyncio.sleep(2)
+            steps.append(3)
+            self.assertEqual([0, 1, 2, 3], steps)
 
         # @set_async_timeout(1)
         async def test_async_coro(self):

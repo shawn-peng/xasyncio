@@ -11,6 +11,14 @@ class ThreadingError(Exception):
     pass
 
 
+def handle_result(future):
+    try:
+        # This will trigger the exception if the coroutine failed
+        future.result()
+    except Exception:
+        logging.exception("Exception caught in background thread safe task:")
+
+
 @dataclasses.dataclass
 class AsyncThreadBase:
     # def call_async(self, func, *args):
@@ -127,10 +135,13 @@ class AsyncThreadBase:
     #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
 
     def sync_coroutine(self, coro, timeout=None):
+        """may from another thread"""
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
 
     def ensure_coroutine(self, coro):
-        return asyncio.run_coroutine_threadsafe(coro, self.loop)
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        future.add_done_callback(handle_result)
+        return future
 
     async def run_coroutine(self, coro):
         return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(coro, self.loop))
@@ -154,6 +165,8 @@ class AsyncThreadBase:
 
 
 class AsyncThread(threading.Thread, AsyncThreadBase):
+    """Class for a new thread"""
+
     def __init__(self, name):
         # super(AsyncThread, self).__init__()
         threading.Thread.__init__(self)
@@ -216,6 +229,8 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
 
 
 class AsyncedThread(AsyncThreadBase):
+    """Class for converting an existing thread"""
+
     def __init__(self, name, thread):
         self.thread = thread
         self.loop = asyncio.get_event_loop()
