@@ -101,6 +101,7 @@ class BaseTestCases:
                 raise Exception('test ex')
 
             loop.ensure_coroutine(_test_coro())
+
             steps.append(1)
             await asyncio.sleep(.1)
             self.assertEqual([0, 1, 2], steps)
@@ -127,10 +128,34 @@ class BaseTestCases:
 
             async def _test_coro():
                 print('coroutine called')
-                steps.append(1)
+                steps.append(2)
 
-            await loop.run_coroutine(_test_coro())
-            steps.append(2)
+            def _test_in_thread():
+                steps.append(1)
+                loop.sync_coroutine(_test_coro())
+                steps.append(3)
+
+            t = AsyncThread('stub_thread')
+            await t.call_sync(_test_in_thread)
+
+            self.assertEqual([0, 1, 2, 3], steps)
+            print('stopping stub thread')
+            await t.stop()
+            print('stopping threaded loop')
+            # loop.stop()
+
+        # @set_async_timeout(1)
+        async def test_async_coro(self):
+            steps = [0]
+            loop = self.loop
+
+            async def _test_coro():
+                print('coroutine called')
+                steps.append(2)
+
+            loop.ensure_coroutine(_test_coro())
+            steps.append(1)
+            await asyncio.sleep(.1)
             self.assertEqual([0, 1, 2], steps)
             print('stopping threaded loop')
             # loop.stop()
@@ -148,21 +173,6 @@ class BaseTestCases:
             await asyncio.sleep(2)
             steps.append(3)
             self.assertEqual([0, 1, 2, 3], steps)
-
-        # @set_async_timeout(1)
-        async def test_async_coro(self):
-            steps = [0]
-            loop = self.loop
-
-            async def _test_coro():
-                print('coroutine called')
-                steps.append(1)
-
-            await loop.run_coroutine(_test_coro())
-            steps.append(2)
-            self.assertEqual([0, 1, 2], steps)
-            print('stopping threaded loop')
-            # loop.stop()
 
 
 class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):

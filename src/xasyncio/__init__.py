@@ -136,6 +136,12 @@ class AsyncThreadBase:
 
     def sync_coroutine(self, coro, timeout=None):
         """may from another thread"""
+        # use run_coroutine_threadsafe in the same thread will deadlock
+        # so we must check in which thread we are calling this
+        if asyncio.get_event_loop() is self.loop:
+            raise ThreadingError('Must call sync coroutine from another '
+                                 'thread. Use await run_coroutine(coro) '
+                                 'instead or just use await coro.')
         return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
 
     def ensure_coroutine(self, coro):
@@ -144,7 +150,8 @@ class AsyncThreadBase:
         return future
 
     async def run_coroutine(self, coro):
-        return await asyncio.wrap_future(asyncio.run_coroutine_threadsafe(coro, self.loop))
+        return await asyncio.wrap_future(
+            asyncio.run_coroutine_threadsafe(coro, self.loop))
 
     def blocking_call_w_loop(self, loop, func, *args):
         pass
