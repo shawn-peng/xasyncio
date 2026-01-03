@@ -64,7 +64,8 @@ class BaseTestCases:
             steps = [0]
             loop = self.loop
             steps.append(1)
-            await loop.call_sync(lambda: (print('lambda function called'), steps.append(2)))
+            await loop.sync_call(
+                lambda: (print('lambda function called'), steps.append(2)))
             steps.append(3)
             print(loop.stopped)
 
@@ -85,7 +86,7 @@ class BaseTestCases:
                 raise Exception('test ex')
 
             with self.assertRaises(Exception) as cm:
-                await loop.call_sync(_test_func_w_ex)
+                await loop.sync_call(_test_func_w_ex)
             self.assertEqual(str(cm.exception), 'test ex')
             steps.append(3)
             print(loop.stopped)
@@ -107,13 +108,13 @@ class BaseTestCases:
             self.assertEqual([0, 1, 2], steps)
 
         # @set_async_timeout(1)
-        async def test_call_async(self):
+        async def test_async_call(self):
             steps = [0]
             loop = self.loop
             # loop = AsyncedThread('test_loop', threading.current_thread())
             event = ThreadSafeEvent()
             steps.append(1)
-            loop.call_async(lambda: (print('lambda function called'), steps.append(3), event.set()))
+            loop.async_call(lambda: (print('lambda function called'), steps.append(3), event.set()))
             steps.append(2)
             await event.wait()
             steps.append(4)
@@ -121,8 +122,8 @@ class BaseTestCases:
             self.assertEqual([0, 1, 2, 3, 4], steps)
             # del loop
 
-        # @set_async_timeout(1)
-        async def test_sync_coro(self):
+        @set_async_timeout(1)
+        async def test_run_coro(self):
             steps = [0]
             loop = self.loop
 
@@ -130,19 +131,42 @@ class BaseTestCases:
                 print('coroutine called')
                 steps.append(2)
 
-            def _test_in_thread():
+            async def _test_in_thread():
                 steps.append(1)
-                loop.sync_coroutine(_test_coro())
+                await loop.run_coroutine(_test_coro())
                 steps.append(3)
 
             t = AsyncThread('stub_thread')
-            await t.call_sync(_test_in_thread)
+            await t.run_coroutine(_test_in_thread())
 
             self.assertEqual([0, 1, 2, 3], steps)
             print('stopping stub thread')
             await t.stop()
             print('stopping threaded loop')
             # loop.stop()
+
+        # @set_async_timeout(1)
+        # async def test_sync_coro(self):
+        #     steps = [0]
+        #     loop = self.loop
+        #
+        #     async def _test_coro():
+        #         print('coroutine called')
+        #         steps.append(2)
+        #
+        #     def _test_in_thread():
+        #         steps.append(1)
+        #         loop.sync_coroutine(_test_coro())
+        #         steps.append(3)
+        #
+        #     t = AsyncThread('stub_thread')
+        #     await t.call_sync(_test_in_thread)
+        #
+        #     self.assertEqual([0, 1, 2, 3], steps)
+        #     print('stopping stub thread')
+        #     await t.stop()
+        #     print('stopping threaded loop')
+        #     # loop.stop()
 
         # @set_async_timeout(1)
         async def test_async_coro(self):
