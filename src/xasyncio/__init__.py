@@ -187,7 +187,7 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
 
     def __init__(self, name):
         # super(AsyncThread, self).__init__()
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, daemon=True)
         AsyncThreadBase.__init__(self)
         self.name = name
         self.events = {}
