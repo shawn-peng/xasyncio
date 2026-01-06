@@ -41,6 +41,12 @@ class AsyncThreadBase:
     events: dict = dataclasses.field(default_factory=dict)
     events_out_thread: dict = dataclasses.field(default_factory=dict)
 
+    async def __aenter__(self):
+        pass
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        pass
+
     def _stop_self(self):
         """this function must be called with this thread"""
         if self.stopped:

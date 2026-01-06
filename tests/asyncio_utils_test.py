@@ -212,9 +212,11 @@ class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         self.loop = AsyncThread('test_loop')
+        await self.loop.__aenter__()
 
     async def asyncTearDown(self) -> None:
-        await self.loop.stop()
+        # await self.loop.stop()
+        await self.loop.__aexit__(*sys.exc_info())
         self.assertEqual(True, self.loop.stopped)
 
 
