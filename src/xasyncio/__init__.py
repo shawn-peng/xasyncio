@@ -5,10 +5,8 @@ import threading
 import traceback
 
 from typing import *
-
-
-class ThreadingError(Exception):
-    pass
+from .queue import AsyncQueue
+from .utils import ThreadingError
 
 
 def handle_result(future):
@@ -115,12 +113,14 @@ class AsyncThreadBase:
 
         exception = None
 
-        def _ex_handler(e):
+        def _ex_handler(loop, e):
+            print('e is', e)
+            print('e type', type(e))
             nonlocal exception
             exception = e
             raise exception
 
-        self.loop.set_exception_handler(_ex_handler)
+        # self.loop.set_exception_handler(_ex_handler)
 
         self.loop.call_soon_threadsafe(_helper)
         await finish_event.wait()
@@ -138,13 +138,18 @@ class AsyncThreadBase:
         """may from another thread"""
         # use run_coroutine_threadsafe in the same thread will deadlock
         # so we must check in which thread we are calling this
-        # if asyncio.get_event_loop() is self.loop:
+        if asyncio.get_event_loop() is self.loop:
+            print('running in same thread')
+            return await asyncio.wait_for(coro, timeout)
         #     raise ThreadingError('Must call sync coroutine from another '
         #                          'thread. Use await run_coroutine(coro) '
         #                          'instead or just use await coro.')
         # return asyncio.run_coroutine_threadsafe(coro, self.loop).result(timeout)
-        return await asyncio.wrap_future(
-            asyncio.run_coroutine_threadsafe(coro, self.loop))
+        # return await asyncio.wrap_future(
+        #     asyncio.run_coroutine_threadsafe(coro, self.loop))
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        future.add_done_callback(handle_result)
+        return await asyncio.wait_for(asyncio.wrap_future(future), timeout)
 
     def ensure_coroutine(self, coro):
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
@@ -184,15 +189,22 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         self.loop: asyncio.AbstractEventLoop | None = None
         self.stopped = True
         self.create_out_thread_event('loop_started')
+
+    async def __aenter__(self):
         self.start()
         self.wait_out_thread_event('loop_started')
         logging.debug('AsyncThread init finished and running')
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.stop()
+        logging.debug(f'{self} stopped')
 
     def __repr__(self):
         return f'<AsyncThread {self.name}>'
 
     async def stop(self):
-        # Called in other thread
+        # Called in another thread
         await super().stop()
         res = self.join(1)
         print(res)

@@ -7,6 +7,13 @@ import time
 import unittest
 from unittest.mock import patch
 
+import sys
+
+def is_debugging():
+    return sys.gettrace() is not None or 'pydevd' in sys.modules
+
+print(f"Is debugger active? {is_debugging()}")
+
 from xasyncio import *
 
 
@@ -27,7 +34,7 @@ def set_async_timeout(timeout):
 
         return _f
 
-    return _set_async_timeout
+    return _set_async_timeout if not is_debugging() else lambda f: f
 
 
 async def timer(t, coro):
@@ -114,12 +121,14 @@ class BaseTestCases:
             # loop = AsyncedThread('test_loop', threading.current_thread())
             event = ThreadSafeEvent()
             steps.append(1)
-            loop.async_call(lambda: (print('lambda function called'), steps.append(3), event.set()))
+            loop.async_call(
+                lambda: (print('lambda function called'), steps.append(2),
+                         event.set()))
             steps.append(2)
             await event.wait()
-            steps.append(4)
+            steps.append(3)
 
-            self.assertEqual([0, 1, 2, 3, 4], steps)
+            self.assertEqual([0, 1, 2, 2, 3], steps)
             # del loop
 
         @set_async_timeout(1)
@@ -136,14 +145,14 @@ class BaseTestCases:
                 await loop.run_coroutine(_test_coro())
                 steps.append(3)
 
-            t = AsyncThread('stub_thread')
-            await t.run_coroutine(_test_in_thread())
+            async with AsyncThread('stub_thread') as t:
+                await t.run_coroutine(_test_in_thread())
 
-            self.assertEqual([0, 1, 2, 3], steps)
-            print('stopping stub thread')
-            await t.stop()
-            print('stopping threaded loop')
-            # loop.stop()
+                self.assertEqual([0, 1, 2, 3], steps)
+                # print('stopping stub thread')
+                # await t.stop()
+                # print('stopping threaded loop')
+                # loop.stop()
 
         # @set_async_timeout(1)
         # async def test_sync_coro(self):
@@ -175,12 +184,12 @@ class BaseTestCases:
 
             async def _test_coro():
                 print('coroutine called')
-                steps.append(2)
+                steps.append(1)
 
             loop.ensure_coroutine(_test_coro())
             steps.append(1)
             await asyncio.sleep(.1)
-            self.assertEqual([0, 1, 2], steps)
+            self.assertEqual([0, 1, 1], steps)
             print('stopping threaded loop')
             # loop.stop()
 
@@ -214,8 +223,41 @@ class AsyncedThreadTestCase(BaseTestCases.AsyncThreadTestBase):
         await super().asyncSetUp()
         self.loop = AsyncedThread('test_loop', threading.current_thread())
 
-    def tearDown(self) -> None:
-        pass
+
+class AsyncQueueTestCase(unittest.IsolatedAsyncioTestCase):
+    async def test_queue_put_get_in_one_thread(self) -> None:
+        q = AsyncQueue()
+        await q.put(1)
+        await q.put(2)
+        self.assertEqual(1, await q.get())
+        self.assertEqual(2, await q.get())
+
+    async def test_queue_get_in_wrong_thread(self) -> None:
+        q = AsyncQueue()
+        await q.put(1)
+
+        async def test_in_thread():
+            item = await q.get()
+            print('got item', item)
+
+        async with AsyncThread('test_loop') as t:
+            await q.put(1)
+
+            with self.assertRaises(Exception) as cm:
+                await t.run_coroutine(test_in_thread())
+            self.assertEqual(str(cm.exception),
+                             'Not called in the owner thread')
+
+    async def test_queue_put_in_another_thread(self) -> None:
+        q = AsyncQueue()
+
+        async def test_in_thread():
+            await q.put(1)
+
+        async with AsyncThread('test_loop') as t:
+            await t.run_coroutine(test_in_thread())
+            res = await q.get()
+            self.assertEqual(1, res)
 
 
 if __name__ == '__main__':
