@@ -64,7 +64,9 @@ class AsyncThreadBase:
         # else:
         #     print('calling from another loop')
         print(f'Threaded loop {self.name} stopping')
-        await self.sync_call(self._stop_self)
+        if asyncio.get_event_loop().is_running() and self.loop.is_running():
+            await self.sync_call(self._stop_self)
+        print(f'Threaded loop {self.name} stopped')
 
     def _mark_running(self, running=True):
         # if running:
@@ -264,6 +266,9 @@ class AsyncedThread(AsyncThreadBase):
         self.events = {}
         self.events_out_thread = {}
         self.stopped = True
+
+    def __repr__(self):
+        return f'<AsyncedThread {self.name}, loop={hex(id(self.loop))}>'
 
 
 class ThreadSafeEvent(asyncio.Event):
