@@ -1,20 +1,13 @@
 import asyncio
 import dataclasses
 import logging
+import sys
 import threading
 import traceback
 
 from typing import *
 from .queue import AsyncQueue
 from .utils import ThreadingError
-
-
-def handle_result(future):
-    try:
-        # This will trigger the exception if the coroutine failed
-        future.result()
-    except Exception:
-        logging.exception("Exception caught in background thread safe task:")
 
 
 @dataclasses.dataclass
@@ -40,6 +33,7 @@ class AsyncThreadBase:
     loop: asyncio.AbstractEventLoop | None = None
     events: dict = dataclasses.field(default_factory=dict)
     events_out_thread: dict = dataclasses.field(default_factory=dict)
+    exception_handler: Callable = None
 
     async def __aenter__(self):
         pass
@@ -156,13 +150,50 @@ class AsyncThreadBase:
         # return await asyncio.wrap_future(
         #     asyncio.run_coroutine_threadsafe(coro, self.loop))
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
-        future.add_done_callback(handle_result)
+        future.add_done_callback(self.handle_result)
         return await asyncio.wait_for(asyncio.wrap_future(future), timeout)
 
     def ensure_coroutine(self, coro):
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
-        future.add_done_callback(handle_result)
+        future.add_done_callback(self.handle_result)
         return future
+
+    def handle_exception(self, loop: asyncio.AbstractEventLoop, context):
+        logging.error(f'{self} got exception, context: {context}')
+        async def exception_handle_helper():
+            if self.exception_handler:
+                logging.info(f'calling registered exception handler')
+                await self.exception_handler()
+
+            await self.stop()
+        loop.create_task(exception_handle_helper())
+
+
+    async def register_exception_handler(self, handler: Callable[[],
+    Awaitable[None]]):
+        """Register a handler for exception handling
+
+        When an exception is raised, a task will be created back on the
+        asyncio loop of the caller thread. Using async func so that we
+        require this is called in an async loop. handler should be an async
+        function too.
+        """
+        async_thread = current_async_thread()
+
+        async def _handler_wrapper():
+            await async_thread.run_coroutine(handler())
+
+        self.exception_handler = _handler_wrapper
+
+    def handle_result(self, future):
+        try:
+            # This will trigger the exception if the coroutine failed
+            future.result()
+        except Exception:
+            logging.exception(
+                "Exception caught in background thread safe task:")
+            if self.exception_handler:
+                self.async_call(self.exception_handler())
 
     # async def run_coroutine(self, coro):
 
@@ -220,6 +251,7 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
     def run(self):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
+        self.loop.set_exception_handler(self.handle_exception)
 
         # Need to call this in the loop, mainly because need to make sure the loop is running
         # debugging version
@@ -269,6 +301,13 @@ class AsyncedThread(AsyncThreadBase):
 
     def __repr__(self):
         return f'<AsyncedThread {self.name}, loop={hex(id(self.loop))}>'
+
+
+def current_async_thread():
+    thread = threading.current_thread()
+    if isinstance(thread, AsyncThreadBase):
+        return thread
+    return AsyncedThread('wrapped_async_thread', thread)
 
 
 class ThreadSafeEvent(asyncio.Event):

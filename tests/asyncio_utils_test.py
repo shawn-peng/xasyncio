@@ -105,14 +105,14 @@ class BaseTestCases:
             loop = self.loop
 
             async def _test_coro():
-                steps.append(2)
+                steps.append(1)
                 raise Exception('test ex')
 
             loop.ensure_coroutine(_test_coro())
 
             steps.append(1)
             await asyncio.sleep(.1)
-            self.assertEqual([0, 1, 2], steps)
+            self.assertEqual([0, 1, 1], steps)
 
         # @set_async_timeout(1)
         async def test_async_call(self):
@@ -206,6 +206,24 @@ class BaseTestCases:
             await asyncio.sleep(2)
             steps.append(3)
             self.assertEqual([0, 1, 2, 3], steps)
+
+        async def test_exc_handle(self):
+            steps = [0]
+            loop = self.loop
+
+            def loop_func():
+                steps.append(1)
+                raise (Exception('test ex'))
+
+            thread = threading.current_thread()
+            async def _test_exc_handle():
+                self.assertIs(thread, threading.current_thread())
+                steps.append(2)
+
+            await loop.register_exception_handler(_test_exc_handle)
+            loop.async_call(loop_func)
+            await asyncio.sleep(1)
+            self.assertEqual([0, 1, 2], steps)
 
 
 class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
