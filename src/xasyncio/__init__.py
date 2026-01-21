@@ -37,11 +37,11 @@ class AsyncThreadBase:
     events_out_thread: dict = dataclasses.field(default_factory=dict)
     exception_handler: Callable = None
 
-    def __post_init__(self):
-        if self.loop in async_threads:
-            raise KeyError(
-                f'Async thread for loop({hex(id(self.loop))} already exists')
-        async_threads[self.loop] = self
+    # def __post_init__(self):
+    #     if self.loop in async_threads:
+    #         raise KeyError(
+    #             f'Async thread for loop({hex(id(self.loop))}) already exists')
+    #     async_threads[self.loop] = self
 
     async def __aenter__(self):
         pass
@@ -55,6 +55,7 @@ class AsyncThreadBase:
             return
         self.loop.stop()
         self.stopped = True
+        unregister_thread(self)
 
     async def stop(self):
         """thread safe stop function"""
@@ -261,6 +262,7 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.loop.set_exception_handler(self.handle_exception)
+        register_thread(self)
 
         # Need to call this in the loop, mainly because need to make sure the loop is running
         # debugging version
@@ -303,18 +305,35 @@ class AsyncedThread(AsyncThreadBase):
         self.thread = thread
         self.loop = asyncio.get_event_loop()
         assert self.loop.is_running()  # we require the loop already running
+        self.loop.set_exception_handler(self.handle_exception)
         self.name = name
         self.events = {}
         self.events_out_thread = {}
         self.stopped = True
-        self.loop.set_exception_handler(self.handle_exception)
-        if self.loop in async_threads:
-            raise KeyError(
-                f'Async thread for loop({hex(id(self.loop))} already exists')
-        async_threads[self.loop] = self
+
+        register_thread(self)
 
     def __repr__(self):
         return f'<AsyncedThread {self.name}, loop={hex(id(self.loop))}>'
+
+
+def register_thread(thread: AsyncThreadBase):
+    if not thread.loop:
+        raise RuntimeError('Async thread is not associated with a loop')
+    if thread.loop in async_threads:
+        raise KeyError(
+            f'Async thread for loop({hex(id(thread.loop))}) already exists')
+    async_threads[thread.loop] = thread
+
+
+def unregister_thread(thread: AsyncThreadBase):
+    if not thread.loop:
+        raise RuntimeError('Async thread is not associated with a loop')
+    if thread.loop not in async_threads:
+        raise KeyError(
+            f'Async thread for loop({hex(id(thread.loop))}) has not been '
+            f'registered yet')
+    del async_threads[thread.loop]
 
 
 def current_async_thread():

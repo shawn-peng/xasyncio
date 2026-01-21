@@ -9,6 +9,9 @@ from unittest.mock import patch
 
 import sys
 
+import xasyncio
+
+
 def is_debugging():
     return sys.gettrace() is not None or 'pydevd' in sys.modules
 
@@ -63,6 +66,7 @@ class BaseTestCases:
 
         def tearDown(self) -> None:
             # self.deadline.cancel()
+            xasyncio.async_threads.clear()
             pass
 
         # @set_async_timeout(1)
