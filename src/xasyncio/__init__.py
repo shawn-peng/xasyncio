@@ -9,6 +9,8 @@ from typing import *
 from .queue import AsyncQueue
 from .utils import ThreadingError
 
+async_threads = {}
+
 
 @dataclasses.dataclass
 class AsyncThreadBase:
@@ -34,6 +36,12 @@ class AsyncThreadBase:
     events: dict = dataclasses.field(default_factory=dict)
     events_out_thread: dict = dataclasses.field(default_factory=dict)
     exception_handler: Callable = None
+
+    def __post_init__(self):
+        if self.loop in async_threads:
+            raise KeyError(
+                f'Async thread for loop({hex(id(self.loop))} already exists')
+        async_threads[self.loop] = self
 
     async def __aenter__(self):
         pass
@@ -160,14 +168,15 @@ class AsyncThreadBase:
 
     def handle_exception(self, loop: asyncio.AbstractEventLoop, context):
         logging.error(f'{self} got exception, context: {context}')
+
         async def exception_handle_helper():
             if self.exception_handler:
                 logging.info(f'calling registered exception handler')
                 await self.exception_handler()
 
             await self.stop()
-        loop.create_task(exception_handle_helper())
 
+        loop.create_task(exception_handle_helper())
 
     async def register_exception_handler(self, handler: Callable[[],
     Awaitable[None]]):
@@ -298,16 +307,26 @@ class AsyncedThread(AsyncThreadBase):
         self.events = {}
         self.events_out_thread = {}
         self.stopped = True
+        self.loop.set_exception_handler(self.handle_exception)
+        if self.loop in async_threads:
+            raise KeyError(
+                f'Async thread for loop({hex(id(self.loop))} already exists')
+        async_threads[self.loop] = self
 
     def __repr__(self):
         return f'<AsyncedThread {self.name}, loop={hex(id(self.loop))}>'
 
 
 def current_async_thread():
+    loop = asyncio.get_event_loop()
+    if loop in async_threads:
+        return async_threads[loop]
     thread = threading.current_thread()
     if isinstance(thread, AsyncThreadBase):
         return thread
-    return AsyncedThread('wrapped_async_thread', thread)
+    wrapped_thread = AsyncedThread(f'wrapped_async_thread_for_{thread.name}',
+                                   thread)
+    return wrapped_thread
 
 
 class ThreadSafeEvent(asyncio.Event):
