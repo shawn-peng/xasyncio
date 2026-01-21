@@ -64,11 +64,6 @@ class BaseTestCases:
             # self.deadline = create_deadline(1)
             # set_deadline(1)
 
-        def tearDown(self) -> None:
-            # self.deadline.cancel()
-            xasyncio.async_threads.clear()
-            pass
-
         # @set_async_timeout(1)
         async def test_call_sync(self):
             # in Main thread
@@ -240,6 +235,18 @@ class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
         # await self.loop.stop()
         await self.loop.__aexit__(*sys.exc_info())
         self.assertEqual(True, self.loop.stopped)
+
+
+class AsyncThreadUsingEnterTestCase(BaseTestCases.AsyncThreadTestBase):
+    async def asyncSetUp(self) -> None:
+        await super().asyncSetUp()
+        self.loop = AsyncThread('test_loop')
+        self.loop.enter()
+
+    async def asyncTearDown(self) -> None:
+        await self.loop.stop()
+        self.assertEqual(True, self.loop.stopped)
+        await super().asyncTearDown()
 
 
 class AsyncedThreadTestCase(BaseTestCases.AsyncThreadTestBase):

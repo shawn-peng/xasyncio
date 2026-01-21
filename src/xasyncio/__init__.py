@@ -43,11 +43,14 @@ class AsyncThreadBase:
     #             f'Async thread for loop({hex(id(self.loop))}) already exists')
     #     async_threads[self.loop] = self
 
+    def enter(self):
+        raise NotImplementedError
+
     async def __aenter__(self):
-        pass
+        raise NotImplementedError
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        pass
+        raise NotImplementedError
 
     def _stop_self(self):
         """this function must be called with this thread"""
@@ -238,6 +241,11 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         self.loop: asyncio.AbstractEventLoop | None = None
         self.stopped = True
         self.create_out_thread_event('loop_started')
+
+    def enter(self):
+        self.start()
+        self.wait_out_thread_event('loop_started')
+        logging.debug('AsyncThread init finished and running')
 
     async def __aenter__(self):
         self.start()
