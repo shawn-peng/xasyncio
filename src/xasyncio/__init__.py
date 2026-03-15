@@ -10,6 +10,7 @@ from .queue import AsyncQueue
 from .utils import ThreadingError
 
 async_threads = {}
+custom_threads = {}
 
 
 @dataclasses.dataclass
@@ -36,6 +37,7 @@ class AsyncThreadBase:
     events: dict = dataclasses.field(default_factory=dict)
     events_out_thread: dict = dataclasses.field(default_factory=dict)
     exception_handler: Callable = None
+    callback_scheduler: Callable = None
 
     # def __post_init__(self):
     #     if self.loop in async_threads:
@@ -171,7 +173,7 @@ class AsyncThreadBase:
         return future
 
     def handle_exception(self, loop: asyncio.AbstractEventLoop, context):
-        logging.error(f'{self} got exception, context: {context}')
+        logging.error(f'{self} got exception', exc_info=context['exception'])
 
         async def exception_handle_helper():
             if self.exception_handler:
@@ -310,19 +312,43 @@ class AsyncedThread(AsyncThreadBase):
     """Class for converting an existing thread"""
 
     def __init__(self, name, thread):
+        super().__init__(name)
         self.thread = thread
         self.loop = asyncio.get_event_loop()
         assert self.loop.is_running()  # we require the loop already running
         self.loop.set_exception_handler(self.handle_exception)
-        self.name = name
-        self.events = {}
-        self.events_out_thread = {}
         self.stopped = True
 
         register_thread(self)
 
     def __repr__(self):
         return f'<AsyncedThread {self.name}, loop={hex(id(self.loop))}>'
+
+
+class CustomAsyncedThread(AsyncThreadBase):
+    """Class for a new thread"""
+
+    def __init__(self, name, thread, callback_scheduler: Callable[[Any], None]):
+        super().__init__(name)
+        self.thread = thread
+        self.callback_scheduler = callback_scheduler
+        pass
+
+    async def sync_call(self, *args, **kwargs):
+        raise NotImplementedError()
+
+    async def run_coroutine(self, coro, timeout=None):
+        raise NotImplementedError()
+
+    # def ensure_coroutine(self, coro):
+
+
+def register_custom_thread(thread, name, callback_scheduler: Callable[[Any],
+None]):
+    if thread in custom_threads:
+        raise KeyError(f'Custom thread {thread} already exists')
+    custom_threads[thread] = CustomAsyncedThread(name, thread,
+                                                 callback_scheduler)
 
 
 def register_thread(thread: AsyncThreadBase):
@@ -351,6 +377,8 @@ def current_async_thread():
     thread = threading.current_thread()
     if isinstance(thread, AsyncThreadBase):
         return thread
+    if thread in custom_threads:
+        return custom_threads[thread]
     wrapped_thread = AsyncedThread(f'wrapped_async_thread_for_{thread.name}',
                                    thread)
     return wrapped_thread
