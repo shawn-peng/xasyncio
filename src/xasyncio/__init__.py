@@ -371,14 +371,14 @@ def unregister_thread(thread: AsyncThreadBase):
 
 
 def current_async_thread():
+    thread = threading.current_thread()
+    if thread in custom_threads:
+        return custom_threads[thread]
     loop = asyncio.get_event_loop()
     if loop in async_threads:
         return async_threads[loop]
-    thread = threading.current_thread()
     if isinstance(thread, AsyncThreadBase):
         return thread
-    if thread in custom_threads:
-        return custom_threads[thread]
     wrapped_thread = AsyncedThread(f'wrapped_async_thread_for_{thread.name}',
                                    thread)
     return wrapped_thread
