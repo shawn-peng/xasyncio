@@ -1,5 +1,6 @@
 import asyncio
 import dataclasses
+import functools
 import logging
 import sys
 import threading
@@ -11,6 +12,27 @@ from .utils import ThreadingError
 
 async_threads = {}
 custom_threads = {}
+
+
+def _requires_running_loop(func):
+    def _assert_loop_running(self):
+        assert self.loop is not None and self.loop.is_running(), \
+            'The event loop must be running'
+
+    if asyncio.iscoroutinefunction(func):
+        @functools.wraps(func)
+        async def _async_wrapper(self, *args, **kwargs):
+            _assert_loop_running(self)
+            return await func(self, *args, **kwargs)
+
+        return _async_wrapper
+
+    @functools.wraps(func)
+    def _sync_wrapper(self, *args, **kwargs):
+        _assert_loop_running(self)
+        return func(self, *args, **kwargs)
+
+    return _sync_wrapper
 
 
 @dataclasses.dataclass
@@ -107,6 +129,7 @@ class AsyncThreadBase:
     #     # other thread will be blocked and could result in deadlocks
     #     pass
 
+    @_requires_running_loop
     async def sync_call(self, func, *args):
         # Called in other thread
         # blocking_call_w_loop(self.loop, func, *args)
@@ -143,6 +166,7 @@ class AsyncThreadBase:
         if exception:
             raise exception
 
+    @_requires_running_loop
     def async_call(self, func, *args):
         self.loop.call_soon_threadsafe(func, *args)
 
@@ -150,6 +174,7 @@ class AsyncThreadBase:
     #     if threading.current_thread() != self.thread:
     #         raise ThreadingError('Invalid thread: this function must be called in the loop thread')
 
+    @_requires_running_loop
     async def run_coroutine(self, coro, timeout=None):
         """may from another thread"""
         # use run_coroutine_threadsafe in the same thread will deadlock
@@ -167,6 +192,7 @@ class AsyncThreadBase:
         future.add_done_callback(self.handle_result)
         return await asyncio.wait_for(asyncio.wrap_future(future), timeout)
 
+    @_requires_running_loop
     def ensure_coroutine(self, coro):
         future = asyncio.run_coroutine_threadsafe(coro, self.loop)
         future.add_done_callback(self.handle_result)

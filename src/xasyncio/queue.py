@@ -1,6 +1,7 @@
 import asyncio
 import threading
 
+import xasyncio
 from .utils import ThreadingError
 
 
@@ -15,6 +16,7 @@ class AsyncQueue(asyncio.Queue):
         super().__init__()
         self.loop = asyncio.get_event_loop()
         self.thread = threading.current_thread()
+        self.async_thread = xasyncio.current_async_thread()
 
     async def put(self, item):
         asyncio.run_coroutine_threadsafe(super().put(item), self.loop)

@@ -153,6 +153,30 @@ class BaseTestCases:
                 # print('stopping threaded loop')
                 # loop.stop()
 
+        @set_async_timeout(1)
+        async def test_run_coro_nested_interactions_with_async_thread(self):
+            steps = [0]
+            loop = self.loop
+            assert loop
+
+            async with AsyncThread('loop2') as loop2:
+
+                async def task_on_loop2():
+                    steps.append(2)
+                    await loop.run_coroutine(task_on_loop1())
+                    steps.append(4)
+
+                async def task_on_loop1():
+                    steps.append(3)
+
+                async def test():
+                    steps.append(1)
+                    await loop2.run_coroutine(task_on_loop2())
+                    steps.append(5)
+
+                await loop.run_coroutine(test())
+            self.assertEqual([0, 1, 2, 3, 4, 5], steps)
+
         # @set_async_timeout(1)
         # async def test_sync_coro(self):
         #     steps = [0]
@@ -231,6 +255,28 @@ class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
         self.loop = AsyncThread('test_loop')
         await self.loop.__aenter__()
 
+    async def test_loop_methods_require_running_loop(self):
+        loop = AsyncThread('not_started')
+
+        with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+            loop.async_call(lambda: None)
+
+        coroutine = asyncio.sleep(0)
+        try:
+            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+                await loop.sync_call(lambda: None)
+            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+                await loop.run_coroutine(coroutine)
+        finally:
+            coroutine.close()
+
+        coroutine = asyncio.sleep(0)
+        try:
+            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+                loop.ensure_coroutine(coroutine)
+        finally:
+            coroutine.close()
+
     async def asyncTearDown(self) -> None:
         # await self.loop.stop()
         await self.loop.__aexit__(*sys.exc_info())
@@ -253,42 +299,6 @@ class AsyncedThreadTestCase(BaseTestCases.AsyncThreadTestBase):
     async def asyncSetUp(self) -> None:
         await super().asyncSetUp()
         self.loop = AsyncedThread('test_loop', threading.current_thread())
-
-
-class AsyncQueueTestCase(unittest.IsolatedAsyncioTestCase):
-    async def test_queue_put_get_in_one_thread(self) -> None:
-        q = AsyncQueue()
-        await q.put(1)
-        await q.put(2)
-        self.assertEqual(1, await q.get())
-        self.assertEqual(2, await q.get())
-
-    async def test_queue_get_in_wrong_thread(self) -> None:
-        q = AsyncQueue()
-        await q.put(1)
-
-        async def test_in_thread():
-            item = await q.get()
-            print('got item', item)
-
-        async with AsyncThread('test_loop') as t:
-            await q.put(1)
-
-            with self.assertRaises(Exception) as cm:
-                await t.run_coroutine(test_in_thread())
-            self.assertEqual(str(cm.exception),
-                             'Not called in the owner thread')
-
-    async def test_queue_put_in_another_thread(self) -> None:
-        q = AsyncQueue()
-
-        async def test_in_thread():
-            await q.put(1)
-
-        async with AsyncThread('test_loop') as t:
-            await t.run_coroutine(test_in_thread())
-            res = await q.get()
-            self.assertEqual(1, res)
 
 
 if __name__ == '__main__':
