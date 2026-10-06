@@ -117,6 +117,7 @@ class BaseTestCases:
         async def test_async_call(self):
             steps = [0]
             loop = self.loop
+            assert loop and loop.loop
             # loop = AsyncedThread('test_loop', threading.current_thread())
             event = ThreadSafeEvent()
             steps.append(1)

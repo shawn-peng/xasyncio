@@ -14,12 +14,13 @@ class AsyncQueue(asyncio.Queue):
 
     def __init__(self):
         super().__init__()
-        self.loop = asyncio.get_event_loop()
+        # self.loop = asyncio.get_event_loop()
         self.thread = threading.current_thread()
         self.async_thread = xasyncio.current_async_thread()
 
     async def put(self, item):
-        asyncio.run_coroutine_threadsafe(super().put(item), self.loop)
+        # asyncio.run_coroutine_threadsafe(super().put(item), self.loop)
+        await self.async_thread.run_coroutine(super().put(item))
 
     async def get(self):
         if threading.current_thread() is not self.thread:

@@ -269,11 +269,18 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         self.loop: asyncio.AbstractEventLoop | None = None
         self.stopped = True
         self.create_out_thread_event('loop_started')
+        # self._enter()
 
-    def enter(self):
+    def _enter(self):
         self.start()
         self.wait_out_thread_event('loop_started')
         logging.debug('AsyncThread init finished and running')
+
+    def enter(self):
+        # self.start()
+        # self.wait_out_thread_event('loop_started')
+        # logging.debug('AsyncThread init finished and running')
+        self._enter()
 
     async def __aenter__(self):
         self.start()
@@ -295,6 +302,8 @@ class AsyncThread(threading.Thread, AsyncThreadBase):
         print(res)
 
     def run(self):
+        # We need to create loop in the thread. Otherwise, it will be created
+        # on the wrong thread.
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.loop.set_exception_handler(self.handle_exception)
