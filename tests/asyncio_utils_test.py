@@ -154,6 +154,26 @@ class BaseTestCases:
                 # print('stopping threaded loop')
                 # loop.stop()
 
+        async def test_run_coroutine_sync(self):
+            steps = [0]
+            loop = self.loop
+            assert loop is not None
+            loop2 = AsyncThread('loop2')
+            loop2.enter()
+
+            async def _test():
+                steps.append(1)
+                loop.run_coroutine_sync(_test_coro())
+                steps.append(3)
+
+            async def _test_coro():
+                print('coroutine called')
+                steps.append(2)
+
+            await loop2.run_coroutine(_test())
+            steps.append(4)
+            self.assertEqual([0, 1, 2, 3, 4], steps)
+
         @set_async_timeout(1)
         async def test_run_coro_nested_interactions_with_async_thread(self):
             steps = [0]
@@ -227,7 +247,7 @@ class BaseTestCases:
                 steps.append(2)
 
             loop.ensure_coroutine(loop_func())
-            await asyncio.sleep(2)
+            await asyncio.sleep(.5)
             steps.append(3)
             self.assertEqual([0, 1, 2, 3], steps)
 

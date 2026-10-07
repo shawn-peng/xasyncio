@@ -128,6 +128,26 @@ class AsyncThreadBase:
     # def call_sync(self, func, *args):
     #     # other thread will be blocked and could result in deadlocks
     #     pass
+    @_requires_running_loop
+    def run_coroutine_sync(self, coro, timeout=None):
+        """
+        WARNING!!!: This function will block the calling thread until the
+        coroutine is done. Use with caution, as it may lead to deadlocks if
+        the coroutine send task back to the calling thread directly or
+        indirectly.
+        Use run_coroutine instead if you want to await the coroutine
+        This must be called from another thread. From the same thread ensures a
+        deadlock.
+        """
+        # use run_coroutine_threadsafe in the same thread will deadlock
+        # so we must check in which thread we are calling this
+        if asyncio.get_event_loop() is self.loop:
+            print('running in same thread')
+            return asyncio.run_coroutine_threadsafe(coro, self.loop).result(
+                timeout)
+        future = asyncio.run_coroutine_threadsafe(coro, self.loop)
+        future.add_done_callback(self.handle_result)
+        return future.result(timeout)
 
     @_requires_running_loop
     async def sync_call(self, func, *args):
