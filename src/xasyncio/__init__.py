@@ -5,6 +5,7 @@ import logging
 import sys
 import threading
 import traceback
+import inspect
 
 from typing import *
 from .queue import AsyncQueue
@@ -139,6 +140,7 @@ class AsyncThreadBase:
         This must be called from another thread. From the same thread ensures a
         deadlock.
         """
+        # TODO: flag the loop to be not accepting new async tasks
         # use run_coroutine_threadsafe in the same thread will deadlock
         # so we must check in which thread we are calling this
         if asyncio.get_event_loop() is self.loop:
@@ -220,18 +222,20 @@ class AsyncThreadBase:
 
     def handle_exception(self, loop: asyncio.AbstractEventLoop, context):
         logging.error(f'{self} got exception', exc_info=context['exception'])
+        e = context.get('exception')
 
-        async def exception_handle_helper():
+        async def exception_handle_helper(e: Exception):
             if self.exception_handler:
                 logging.info(f'calling registered exception handler')
-                await self.exception_handler()
+                await self.exception_handler(e)
 
             await self.stop()
 
-        loop.create_task(exception_handle_helper())
+        loop.create_task(exception_handle_helper(e))
 
-    async def register_exception_handler(self, handler: Callable[[],
-    Awaitable[None]]):
+    async def register_exception_handler(self,
+                                         handler: Callable[[Exception],
+                                                           Awaitable[None]]):
         """Register a handler for exception handling
 
         When an exception is raised, a task will be created back on the
@@ -239,22 +243,32 @@ class AsyncThreadBase:
         require this is called in an async loop. handler should be an async
         function too.
         """
+        assert asyncio.iscoroutinefunction(handler), \
+            'handler must be an async function'
         async_thread = current_async_thread()
 
-        async def _handler_wrapper():
-            await async_thread.run_coroutine(handler())
+        try:
+            inspect.signature(handler).bind(Exception())
+        except TypeError as exc:
+            raise TypeError(
+                "handler must accept one Exception argument") from exc
+
+        async def _handler_wrapper(e):
+            await async_thread.run_coroutine(handler(e))
 
         self.exception_handler = _handler_wrapper
 
     def handle_result(self, future):
         try:
             # This will trigger the exception if the coroutine failed
-            future.result()
-        except Exception:
+            print('future in handle_result:', future.result())
+        except Exception as e:
             logging.exception(
                 "Exception caught in background thread safe task:")
             if self.exception_handler:
-                self.async_call(self.exception_handler())
+                self.run_coroutine_sync(self.exception_handler(e))
+                # self.exception_handler(e)
+                # self.run_coroutine_sync(self.exception_handler())
 
     # async def run_coroutine(self, coro):
 

@@ -15,6 +15,7 @@ import xasyncio
 def is_debugging():
     return sys.gettrace() is not None or 'pydevd' in sys.modules
 
+
 print(f"Is debugger active? {is_debugging()}")
 
 from xasyncio import *
@@ -181,7 +182,6 @@ class BaseTestCases:
             assert loop
 
             async with AsyncThread('loop2') as loop2:
-
                 async def task_on_loop2():
                     steps.append(2)
                     await loop.run_coroutine(task_on_loop1())
@@ -255,19 +255,30 @@ class BaseTestCases:
             steps = [0]
             loop = self.loop
 
+            # with self.assertRaisesRegex(AssertionError,
+            #                             'handler must be an async function'):
+            #     await loop.register_exception_handler(lambda error: None)
+
             def loop_func():
                 steps.append(1)
                 raise (Exception('test ex'))
 
             thread = threading.current_thread()
-            async def _test_exc_handle():
-                self.assertIs(thread, threading.current_thread())
+            thread_in_handler = None
+
+            async def _test_exc_handle(e: Exception):
+                nonlocal thread_in_handler
+                self.assertEqual('test ex', str(e))
+                print(id(thread), id(threading.current_thread()))
+                # self.assertIs(thread, threading.current_thread())
+                thread_in_handler = threading.current_thread()
                 steps.append(2)
 
             await loop.register_exception_handler(_test_exc_handle)
             loop.async_call(loop_func)
-            await asyncio.sleep(1)
+            await asyncio.sleep(.1)
             self.assertEqual([0, 1, 2], steps)
+            self.assertIs(thread, thread_in_handler)
 
 
 class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
@@ -279,21 +290,25 @@ class AsyncThreadTestCase(BaseTestCases.AsyncThreadTestBase):
     async def test_loop_methods_require_running_loop(self):
         loop = AsyncThread('not_started')
 
-        with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+        with self.assertRaisesRegex(AssertionError,
+                                    'event loop must be running'):
             loop.async_call(lambda: None)
 
         coroutine = asyncio.sleep(0)
         try:
-            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+            with self.assertRaisesRegex(AssertionError,
+                                        'event loop must be running'):
                 await loop.sync_call(lambda: None)
-            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+            with self.assertRaisesRegex(AssertionError,
+                                        'event loop must be running'):
                 await loop.run_coroutine(coroutine)
         finally:
             coroutine.close()
 
         coroutine = asyncio.sleep(0)
         try:
-            with self.assertRaisesRegex(AssertionError, 'event loop must be running'):
+            with self.assertRaisesRegex(AssertionError,
+                                        'event loop must be running'):
                 loop.ensure_coroutine(coroutine)
         finally:
             coroutine.close()
